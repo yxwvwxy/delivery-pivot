@@ -1,6 +1,6 @@
 # 转单草稿纸 — DSP Tools（独立项目）
 
-路径：`~/delivery-pivot`（已从 `unimap-auto-inbound` 拆出）
+路径：`~/Projects/delivery-pivot`（已从 `unimap-auto-inbound` 拆出）
 
 Sheet：https://docs.google.com/spreadsheets/d/19DWCgZBb-ve32P5nDQs2zgI0z3GhBoO87Tqq7-FfK74
 
