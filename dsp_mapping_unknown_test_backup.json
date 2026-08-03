@@ -1,0 +1,24 @@
+{
+  "removed": [
+    {
+      "driver": "5272493",
+      "202": 250.0,
+      "dsp": "Yuanyuan Pan",
+      "team": "939"
+    },
+    {
+      "driver": "5271783",
+      "202": 200.0,
+      "dsp": "Final Mile",
+      "team": "580"
+    },
+    {
+      "driver": "5272184",
+      "202": 159.0,
+      "dsp": "Gawen Group",
+      "team": "414"
+    }
+  ],
+  "restored": [],
+  "note": "exactly 3 removed for unknown test"
+}
