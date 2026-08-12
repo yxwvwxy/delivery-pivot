@@ -5,9 +5,10 @@
  * 1. 更新 delivery_monitoring
  * 2. 菜单「生成今日妥投」→ 生成/刷新以当天日期命名的 sheet（如 2026-08-03）
  * 3. 未知司机填 R →「Update DSP Mapping」（只追加 dsp_mapping，不改 N–R / 不清 Q–R）
- * 4. 「生成群话术」→ T:Y
+ * 4. 「生成群话术」→ T:Z（7 个 DSP）
  *
  * 历史：往日日期 sheet 会在生成「新一天」时冻结为数值，不再随 monitoring 变化。
+ * dsp_mapping 只追加、永不 clear——可手动改，生成今日妥投不会抹掉手工行。
  *
  * 菜单顺序：
  * 1 生成今日妥投
@@ -30,13 +31,38 @@ var PIVOT_DETAIL_NUM_COLS = 5; // N–R
 var SUMMARY_START_COL = 20; // T
 var Q_FORMULA_LAST_ROW = 300;
 
+/** 主表汇总行数 / 群话术列数 = MASTER_DSPS.length；未知行在其后一行 */
+function masterDspCount_() {
+  return MASTER_DSPS.length;
+}
+function unknownRow_() {
+  // DSP 占 A3 起共 N 行 → 末行 = 2+N；未知在下一行 = 3+N
+  return 3 + masterDspCount_();
+}
+function dspHelperLastRow_() {
+  return 1 + masterDspCount_(); // _pivot_dsp 表头 + N 行
+}
+
 var MASTER_DSPS = [
   "Final Mile",
   "Gawen Group",
   "LITTLESNAILS",
+  "LYL EXPRESS INC",
   "shunda express service",
   "WUKONG",
   "Yuanyuan Pan",
+];
+
+/** 种子映射：生成今日妥投时只追加缺失的 Driver，不删不改已有行 */
+var SEED_MAPPINGS = [
+  ["LYL EXPRESS INC", "1577", "5280544"],
+  ["LYL EXPRESS INC", "1577", "5280546"],
+  ["LYL EXPRESS INC", "1577", "5280770"],
+  ["LYL EXPRESS INC", "1577", "5280893"],
+  ["LYL EXPRESS INC", "1577", "5280903"],
+  ["LYL EXPRESS INC", "1577", "5281117"],
+  ["LYL EXPRESS INC", "1577", "5281909"],
+  ["LYL EXPRESS INC", "1577", "5281915"],
 ];
 
 function onOpen() {
@@ -151,12 +177,56 @@ function looksLikeId_(value) {
  * - 冻结其他日期 sheet（保留历史）
  * - 生成/重建今日「yyyy-MM-dd」sheet
  */
+/**
+ * 只向 dsp_mapping 追加缺失的种子行（按 Driver ID 去重）。
+ * 绝不 clear / 覆盖已有内容——手工改的 mapping 会保留。
+ */
+function ensureSeedMappings_(mappingSheet) {
+  if (!mappingSheet) return 0;
+
+  // 确保表头存在
+  if (mappingSheet.getLastRow() < 1) {
+    mappingSheet.getRange(1, 1, 1, 3).setValues([["DSP Name", "DSP Team ID", "Driver ID"]]);
+  }
+
+  var existingDrivers = new Set();
+  var lastRow = mappingSheet.getLastRow();
+  if (lastRow >= 2) {
+    mappingSheet
+      .getRange("C2:C" + lastRow)
+      .getDisplayValues()
+      .flat()
+      .forEach(function (id) {
+        var s = String(id == null ? "" : id).trim();
+        if (s) existingDrivers.add(s);
+      });
+  }
+
+  var rowsToAdd = [];
+  SEED_MAPPINGS.forEach(function (row) {
+    var driverId = String(row[2]).trim();
+    if (!driverId || existingDrivers.has(driverId)) return;
+    rowsToAdd.push([row[0], row[1], driverId]);
+    existingDrivers.add(driverId);
+  });
+
+  if (rowsToAdd.length === 0) return 0;
+  mappingSheet
+    .getRange(mappingSheet.getLastRow() + 1, 1, rowsToAdd.length, 3)
+    .setValues(rowsToAdd);
+  return rowsToAdd.length;
+}
+
 function generateTodayDelivery() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!getSheetByNames_(ss, SHEETS.monitoring) || !getSheetByNames_(ss, SHEETS.mapping)) {
+  var mappingSheet = getSheetByNames_(ss, SHEETS.mapping);
+  if (!getSheetByNames_(ss, SHEETS.monitoring) || !mappingSheet) {
     SpreadsheetApp.getUi().alert("缺少 delivery_monitoring 或 dsp_mapping。");
     return;
   }
+
+  // 追加种子映射（含 LYL），不删除任何手工行
+  ensureSeedMappings_(mappingSheet);
 
   var today = todaySheetName_();
   freezeOtherDateSheets_(ss, today);
@@ -201,7 +271,8 @@ function freezePivotSheetToValues_(pivot) {
   var a3f = pivot.getRange("A3").getFormula();
   if (!a3f) return;
 
-  var al = pivot.getRange("A1:L9").getDisplayValues();
+  var unk = unknownRow_();
+  var al = pivot.getRange("A1:L" + unk).getDisplayValues();
   var lastRow = Math.max(pivot.getLastRow(), 2);
   var np = pivot.getRange("N2:P" + lastRow).getDisplayValues();
   // 去掉尾部空行
@@ -217,7 +288,7 @@ function freezePivotSheetToValues_(pivot) {
   pivot.getRange("N:P").clearContent();
 
   pivot.getRange("A1:L1").merge();
-  pivot.getRange("A1:L9").setValues(al);
+  pivot.getRange("A1:L" + unk).setValues(al);
   if (np.length) {
     pivot.getRange("N2:P" + (np.length + 1)).setValues(np);
   }
@@ -361,14 +432,15 @@ function freezeDetailColumnsNP_(pivot) {
 }
 
 function refreshUnknownRowStyle_(pivot) {
-  var a9 = pivot.getRange("A9").getDisplayValue();
-  if (a9) {
-    pivot.getRange("A9:L9").setBackground("#FFF2CC");
-    pivot.getRange("F9:H9").setBackground("#FF0000");
+  var r = unknownRow_();
+  var a = pivot.getRange("A" + r).getDisplayValue();
+  if (a) {
+    pivot.getRange("A" + r + ":L" + r).setBackground("#FFF2CC");
+    pivot.getRange("F" + r + ":H" + r).setBackground("#FF0000");
   } else {
-    pivot.getRange("A9:E9").setBackground(null);
-    pivot.getRange("I9:L9").setBackground(null);
-    pivot.getRange("F9:H9").setBackground(null);
+    pivot.getRange("A" + r + ":E" + r).setBackground(null);
+    pivot.getRange("I" + r + ":L" + r).setBackground(null);
+    pivot.getRange("F" + r + ":H" + r).setBackground(null);
   }
 }
 
@@ -401,7 +473,7 @@ function buildSummaryText(drivers) {
   return [summary, detailText].filter(Boolean).join("\n").trim();
 }
 
-/** 生成群话术 → 写到当前工作 pivot 的 T:Y */
+/** 生成群话术 → 写到当前工作 pivot 的 T 起共 N 列（N = MASTER_DSPS.length） */
 function generateDSPSummary() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = getWorkingPivot_(ss);
@@ -417,9 +489,12 @@ function generateDSPSummary() {
     return;
   }
 
-  sheet.getRange("T:Y").breakApart();
-  sheet.getRange("T:Y").clearContent();
-  sheet.getRange("X1").clearContent();
+  var masterDsps = getMasterDspList(ss);
+  var n = masterDsps.length;
+  var endCol = SUMMARY_START_COL + n - 1; // T 起共 n 列
+
+  sheet.getRange(1, SUMMARY_START_COL, sheet.getMaxRows(), endCol).breakApart();
+  sheet.getRange(1, SUMMARY_START_COL, sheet.getMaxRows(), endCol).clearContent();
 
   var data = sheet.getRange("N2:R" + lastRow).getDisplayValues();
   var dspMap = {};
@@ -443,12 +518,9 @@ function generateDSPSummary() {
     dspMap[key].drivers.push({ driver: driverId, cnt: cnt202 });
   });
 
-  var masterDsps = getMasterDspList(ss);
   var EMPTY_MESSAGE = "请提醒司机及时将退件返仓";
 
   masterDsps.forEach(function (dspName, index) {
-    if (index > 5) return;
-
     var col = SUMMARY_START_COL + index;
     var key = normalizeDspKey(dspName);
     var entry = dspMap[key];
@@ -467,14 +539,30 @@ function generateDSPSummary() {
       .setVerticalAlignment("top");
   });
 
-  // T–Y 列宽 150
-  for (var c = SUMMARY_START_COL; c < SUMMARY_START_COL + 6; c++) {
+  for (var c = SUMMARY_START_COL; c <= endCol; c++) {
     sheet.setColumnWidth(c, 150);
   }
 
   SpreadsheetApp.getUi().alert(
-    "群话术已写入「" + sheet.getName() + "」T:Y（" + Math.min(masterDsps.length, 6) + " 个 DSP）"
+    "群话术已写入「" + sheet.getName() + "」列 " +
+      columnToLetter_(SUMMARY_START_COL) +
+      ":" +
+      columnToLetter_(endCol) +
+      "（" +
+      n +
+      " 个 DSP）"
   );
+}
+
+function columnToLetter_(col) {
+  var s = "";
+  var n = col;
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
 
 function setupHelperSheet_(ss) {
@@ -581,10 +669,10 @@ function setupDspHelperSheet_(ss) {
     ])
     .setFontWeight("bold");
 
-  var dsps = getMasterDspList(ss).slice(0, 6);
-  while (dsps.length < 6) dsps.push("");
+  var dsps = getMasterDspList(ss).slice(0, masterDspCount_());
+  while (dsps.length < masterDspCount_()) dsps.push("");
 
-  for (var i = 0; i < 6; i++) {
+  for (var i = 0; i < dsps.length; i++) {
     var row = 2 + i;
     var b = "$B" + row;
     sh.getRange(row, 1).setValue("EWR");
@@ -637,35 +725,62 @@ function setupPivotSheet_(ss, pivot, dateName) {
     ],
   ]);
 
-  pivot.getRange("A3").setFormula("=IFERROR(SORT('_pivot_dsp'!A2:L7,11,FALSE),\"\")");
+  pivot.getRange("A3").setFormula(
+    "=IFERROR(SORT('_pivot_dsp'!A2:L" + dspHelperLastRow_() + ",11,FALSE),\"\")"
+  );
 
-  pivot.getRange("A9").setFormula(
+  var unk = unknownRow_();
+  pivot.getRange("A" + unk).setFormula(
     '=IF(COUNTIFS(\'_pivot_data\'!B:B,"' +
       UNKNOWN_LABEL +
       '",\'_pivot_data\'!D:D,">0")=0,"","EWR")'
   );
-  pivot.getRange("B9").setFormula('=IF(A9="","","' + UNKNOWN_LABEL + '")');
-  pivot.getRange("C9").setFormula(
-    "=IF(B9=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B9)*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$D$2:$D)))"
+  pivot.getRange("B" + unk).setFormula('=IF(A' + unk + '="","","' + UNKNOWN_LABEL + '")');
+  pivot.getRange("C" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$D$2:$D)))"
   );
-  pivot.getRange("D9").setFormula(
-    "=IF(B9=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B9)*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$E$2:$E)))"
+  pivot.getRange("D" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$E$2:$E)))"
   );
-  pivot.getRange("E9").setFormula(
-    "=IF(B9=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B9)*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$G$2:$G)))"
+  pivot.getRange("E" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$G$2:$G)))"
   );
-  pivot.getRange("F9").setFormula(
-    "=IF(B9=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B9)*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$H$2:$H)))"
+  pivot.getRange("F" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$H$2:$H)))"
   );
-  pivot.getRange("G9").setFormula(
-    "=IF(B9=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B9)*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$I$2:$I)))"
+  pivot.getRange("G" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$I$2:$I)))"
   );
-  pivot.getRange("H9").setFormula("=IF(B9=\"\",\"\",C9+D9+E9+F9+G9)");
-  pivot.getRange("I9").setFormula("=IF(B9=\"\",\"\",D9+E9+F9)");
-  pivot.getRange("J9").setFormula("=IF(B9=\"\",\"\",IFERROR(I9/H9,0))");
-  pivot.getRange("K9").setFormula("=IF(B9=\"\",\"\",IFERROR(G9/H9,0))");
-  pivot.getRange("L9").setFormula(
-    "=IF(B9=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B9)*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$M$2:$M)))"
+  pivot.getRange("H" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",C" + unk + "+D" + unk + "+E" + unk + "+F" + unk + "+G" + unk + ")");
+  pivot.getRange("I" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",D" + unk + "+E" + unk + "+F" + unk + ")");
+  pivot.getRange("J" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",IFERROR(I" + unk + "/H" + unk + ",0))");
+  pivot.getRange("K" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",IFERROR(G" + unk + "/H" + unk + ",0))");
+  pivot.getRange("L" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$M$2:$M)))"
   );
 
   pivot.getRange("N2").setFormula(
@@ -719,6 +834,8 @@ function applyPivotFormats_(pivot) {
   var UNKNOWN_BG = "#FFF2CC";
   var FONT = "Arial";
   var SIZE = 10;
+  var unk = unknownRow_();
+  var dspLast = unk - 1; // A3:L{dspLast}
 
   var widths = {
     A: 100,
@@ -746,6 +863,7 @@ function applyPivotFormats_(pivot) {
     W: 150,
     X: 150,
     Y: 150,
+    Z: 150,
   };
   Object.keys(widths).forEach(function (col) {
     pivot.setColumnWidth(pivot.getRange(col + "1").getColumn(), widths[col]);
@@ -772,7 +890,7 @@ function applyPivotFormats_(pivot) {
     .setVerticalAlignment("bottom");
 
   pivot
-    .getRange("A3:L8")
+    .getRange("A3:L" + dspLast)
     .setFontFamily(FONT)
     .setFontSize(SIZE)
     .setFontWeight("normal")
@@ -781,10 +899,10 @@ function applyPivotFormats_(pivot) {
     .setHorizontalAlignment("center")
     .setVerticalAlignment("bottom");
 
-  pivot.getRange("J3:K9").setNumberFormat("0.00%");
+  pivot.getRange("J3:K" + unk).setNumberFormat("0.00%");
 
   pivot
-    .getRange("A9:L9")
+    .getRange("A" + unk + ":L" + unk)
     .setFontFamily(FONT)
     .setFontSize(SIZE)
     .setFontWeight("normal")
@@ -793,7 +911,7 @@ function applyPivotFormats_(pivot) {
     .setHorizontalAlignment("center")
     .setVerticalAlignment("bottom");
 
-  pivot.getRange("F3:H9").setBackground("#FF0000");
+  pivot.getRange("F3:H" + unk).setBackground("#FF0000");
 
   pivot
     .getRange("N2:R2")
