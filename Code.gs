@@ -2,12 +2,14 @@
  * 转单草稿纸 — DSP Tools
  *
  * 日常：
- * 1. 更新 delivery_monitoring
- * 2. 菜单「生成今日妥投」→ 生成/刷新以当天日期命名的 sheet（如 2026-08-03）
- * 3. 未知司机填 R →「Update DSP Mapping」（只追加 dsp_mapping，不改 N–R / 不清 Q–R）
- * 4. 「生成群话术」→ T:Z（7 个 DSP）
+ * 1. 打开表格时会自动冻结「非今日」日期 tab（须在粘贴新 monitoring 之前打开/刷新）
+ * 2. 更新 delivery_monitoring
+ * 3. 菜单「生成今日妥投」→ 生成/刷新以当天日期命名的 sheet（如 2026-08-03）
+ * 4. 未知司机填 R →「Update DSP Mapping」（追加 dsp_mapping，并把当日 A–L 冻成数值）
+ * 5. 「生成群话术」→ T:Z（7 个 DSP）；同时再冻一次当日 A–L
  *
- * 历史：往日日期 sheet 会在生成「新一天」时冻结为数值，不再随 monitoring 变化。
+ * 历史：日期 tab 的 A–L / N–P 一旦冻成数值，就不再引用 _pivot_data。
+ * 若当天补完 mapping 却不冻结 A–L，次日一改 delivery_monitoring，往日「未知」行会被写进去。
  * dsp_mapping 只追加、永不 clear——可手动改，生成今日妥投不会抹掉手工行。
  *
  * 菜单顺序：
@@ -15,6 +17,7 @@
  * 2 修复Q列公式
  * 3 Update DSP Mapping
  * 4 生成群话术
+ * 5 冻结当前妥投表
  */
 
 var SHEETS = {
@@ -72,7 +75,15 @@ function onOpen() {
     .addItem("修复Q列公式", "restoreQMappingFormulas")
     .addItem("Update DSP Mapping", "updateDSPMapping")
     .addItem("生成群话术", "generateDSPSummary")
+    .addItem("冻结当前妥投表", "freezeWorkingPivot")
+    .addItem("清除往日误写入的未知行", "repairPoisonedUnknownRows")
     .addToUi();
+
+  // 刷新/打开时先冻住昨天，避免还没点「生成今日妥投」就先贴新 monitoring 把往日未知行改掉
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    freezeOtherDateSheets_(ss, todaySheetName_());
+  } catch (e) {}
 }
 
 function getSheetByNames_(ss, names) {
@@ -266,35 +277,89 @@ function freezeOtherDateSheets_(ss, todayName) {
   }
 }
 
-function freezePivotSheetToValues_(pivot) {
-  // 若 A3 已无公式，视为已冻结
-  var a3f = pivot.getRange("A3").getFormula();
-  if (!a3f) return;
-
-  var unk = unknownRow_();
-  var al = pivot.getRange("A1:L" + unk).getDisplayValues();
-  var lastRow = Math.max(pivot.getLastRow(), 2);
-  var np = pivot.getRange("N2:P" + lastRow).getDisplayValues();
-  // 去掉尾部空行
-  while (
-    np.length > 1 &&
-    !String(np[np.length - 1][0] || "").trim() &&
-    !String(np[np.length - 1][1] || "").trim()
-  ) {
-    np.pop();
+/** 菜单：把当前工作 pivot 的 A–L / N–P 冻成数值（补完 mapping 后、贴次日数据前） */
+function freezeWorkingPivot() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var pivot = getWorkingPivot_(ss);
+  if (!pivot) {
+    SpreadsheetApp.getUi().alert("请先点「生成今日妥投」。");
+    return;
   }
+  freezePivotSheetToValues_(pivot);
+  SpreadsheetApp.getUi().alert(
+    "已冻结「" +
+      pivot.getName() +
+      "」的 A–L / N–P 为数值。\n此后改 delivery_monitoring 或 dsp_mapping 不会再改这张表的汇总和未知行。"
+  );
+}
+
+/**
+ * 往日 tab 若在「次日 monitoring 已贴上、A–L 仍是公式」时被冻结，
+ * 未知行会变成次日的未知，和本表 N–P 对不上。
+ * 若 N–P 里空 Team 的司机已在 Q/R 补过映射，则清掉这张表的未知行。
+ */
+function repairPoisonedUnknownRows() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var today = todaySheetName_();
+  var unk = unknownRow_();
+  var repaired = [];
+
+  ss.getSheets().forEach(function (sh) {
+    var name = sh.getName();
+    if (!isDateSheetName_(name) || name === today) return;
+    if (sh.getRange("A3").getFormula()) return; // 尚未冻结，留给 freeze 处理
+
+    var bUnk = String(sh.getRange("B" + unk).getDisplayValue() || "").trim();
+    if (normalizeDspKey(bUnk) !== normalizeDspKey(UNKNOWN_LABEL)) return;
+
+    var lastRow = Math.max(sh.getLastRow(), 3);
+    var npq = sh.getRange("N3:R" + lastRow).getDisplayValues();
+    var unmapped = 0;
+    npq.forEach(function (row) {
+      var team = String(row[0] == null ? "" : row[0]).trim();
+      var driver = String(row[1] == null ? "" : row[1]).trim();
+      var q = String(row[3] == null ? "" : row[3]).trim();
+      var r = String(row[4] == null ? "" : row[4]).trim();
+      if (!driver) return;
+      if (!team && !q && !r) unmapped++;
+    });
+
+    if (unmapped > 0) return;
+
+    sh.getRange("A" + unk + ":L" + unk).clearContent();
+    refreshUnknownRowStyle_(sh);
+    repaired.push(name);
+  });
+
+  if (repaired.length === 0) {
+    SpreadsheetApp.getUi().alert("没有需要清除的往日未知行（或该日 N–P 仍有未填 Q/R 的司机）。");
+    return;
+  }
+  SpreadsheetApp.getUi().alert("已清除误写入的未知行：\n" + repaired.join("\n"));
+}
+
+function freezePivotSheetToValues_(pivot) {
+  freezeDetailColumnsNP_(pivot);
+  freezeSummaryAL_(pivot);
+}
+
+/** 将 A–L（含未知行）从公式冻成当前显示值 */
+function freezeSummaryAL_(pivot) {
+  var a3f = pivot.getRange("A3").getFormula();
+  var unk = unknownRow_();
+  var unkF = pivot.getRange("A" + unk).getFormula();
+  if (!a3f && !unkF) return false;
+
+  SpreadsheetApp.flush();
+  var al = pivot.getRange("A1:L" + unk).getDisplayValues();
 
   pivot.getRange("A:L").clearContent();
-  pivot.getRange("N:P").clearContent();
-
   pivot.getRange("A1:L1").merge();
   pivot.getRange("A1:L" + unk).setValues(al);
-  if (np.length) {
-    pivot.getRange("N2:P" + (np.length + 1)).setValues(np);
-  }
 
   applyPivotFormats_(pivot);
   refreshUnknownRowStyle_(pivot);
+  return true;
 }
 
 function restoreQMappingFormulas() {
@@ -380,22 +445,28 @@ function updateDSPMapping() {
     existingDrivers.add(driverId);
   });
 
-  if (rowsToAdd.length === 0) {
-    SpreadsheetApp.getUi().alert(
-      "No new driver mappings found.\n（需在 R 列填数字 Team ID，且该 Team ID 已在 dsp_mapping 中存在）"
-    );
-    return;
-  }
-
   // 写入 mapping 前先把 N–P 冻成数值，避免 QUERY 因新映射重排/改写明细
   freezeDetailColumnsNP_(pivot);
 
-  mappingSheet
-    .getRange(mappingSheet.getLastRow() + 1, 1, rowsToAdd.length, 3)
-    .setValues(rowsToAdd);
+  if (rowsToAdd.length > 0) {
+    mappingSheet
+      .getRange(mappingSheet.getLastRow() + 1, 1, rowsToAdd.length, 3)
+      .setValues(rowsToAdd);
+  }
 
   SpreadsheetApp.flush();
+  // mapping 生效后未知行会消失；立刻冻 A–L，否则次日改 monitoring 会把新的未知写进这张往日表
+  freezeSummaryAL_(pivot);
   refreshUnknownRowStyle_(pivot);
+
+  if (rowsToAdd.length === 0) {
+    SpreadsheetApp.getUi().alert(
+      "没有新 mapping。\n已把「" +
+        pivot.getName() +
+        "」的 A–L 冻成数值，次日改 monitoring 不会再改这张表的未知行。"
+    );
+    return;
+  }
 
   var preview = rowsToAdd
     .map(function (r) {
@@ -406,7 +477,7 @@ function updateDSPMapping() {
     rowsToAdd.length +
       " new driver mappings added:\n" +
       preview +
-      "\n\n仅更新了 dsp_mapping；N–R 内容与顺序、Q/R 显示均未改动。\nA–L 会随映射刷新。"
+      "\n\n已写入 dsp_mapping，N–R 顺序未改。\nA–L 已冻成数值（未知行按当前 mapping 存档）。"
   );
 }
 
@@ -543,6 +614,8 @@ function generateDSPSummary() {
     sheet.setColumnWidth(c, 150);
   }
 
+  freezePivotSheetToValues_(sheet);
+
   SpreadsheetApp.getUi().alert(
     "群话术已写入「" + sheet.getName() + "」列 " +
       columnToLetter_(SUMMARY_START_COL) +
@@ -550,7 +623,7 @@ function generateDSPSummary() {
       columnToLetter_(endCol) +
       "（" +
       n +
-      " 个 DSP）"
+      " 个 DSP）\nA–L 已冻成数值，次日不会再改这张表的未知行。"
   );
 }
 
