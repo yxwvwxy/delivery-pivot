@@ -2,14 +2,12 @@
  * 转单草稿纸 — DSP Tools
  *
  * 日常：
- * 1. 打开表格时会自动冻结「非今日」日期 tab（须在粘贴新 monitoring 之前打开/刷新）
- * 2. 更新 delivery_monitoring
- * 3. 菜单「生成今日妥投」→ 生成/刷新以当天日期命名的 sheet（如 2026-08-03）
- * 4. 未知司机填 R →「Update DSP Mapping」（追加 dsp_mapping，并把当日 A–L 冻成数值）
- * 5. 「生成群话术」→ T:Z（7 个 DSP）；同时再冻一次当日 A–L
+ * 1. 更新 delivery_monitoring
+ * 2. 「生成今日妥投」→ 先冻结往日日期 tab，再生成/刷新当天 sheet
+ * 3. 未知司机填 R →「Update DSP Mapping」（追加 dsp_mapping，并把当日 A–L 冻成数值）
+ * 4. 「生成群话术」→ T:Z（7 个 DSP）
  *
- * 历史：日期 tab 的 A–L / N–P 一旦冻成数值，就不再引用 _pivot_data。
- * 若当天补完 mapping 却不冻结 A–L，次日一改 delivery_monitoring，往日「未知」行会被写进去。
+ * 历史：生成新一天时会先把往日 tab 冻成数值，不再引用 _pivot_data。
  * dsp_mapping 只追加、永不 clear——可手动改，生成今日妥投不会抹掉手工行。
  *
  * 菜单顺序：
@@ -17,7 +15,6 @@
  * 2 修复Q列公式
  * 3 Update DSP Mapping
  * 4 生成群话术
- * 5 冻结当前妥投表
  */
 
 var SHEETS = {
@@ -75,15 +72,7 @@ function onOpen() {
     .addItem("修复Q列公式", "restoreQMappingFormulas")
     .addItem("Update DSP Mapping", "updateDSPMapping")
     .addItem("生成群话术", "generateDSPSummary")
-    .addItem("冻结当前妥投表", "freezeWorkingPivot")
-    .addItem("清除往日误写入的未知行", "repairPoisonedUnknownRows")
     .addToUi();
-
-  // 刷新/打开时先冻住昨天，避免还没点「生成今日妥投」就先贴新 monitoring 把往日未知行改掉
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    freezeOtherDateSheets_(ss, todaySheetName_());
-  } catch (e) {}
 }
 
 function getSheetByNames_(ss, names) {
@@ -236,11 +225,13 @@ function generateTodayDelivery() {
     return;
   }
 
+  var today = todaySheetName_();
+  // 先冻往日（含昨天），再改 helper / mapping，避免今日数据写进历史 tab
+  freezeOtherDateSheets_(ss, today);
+  var repaired = repairPoisonedUnknownRows_(ss, today);
+
   // 追加种子映射（含 LYL），不删除任何手工行
   ensureSeedMappings_(mappingSheet);
-
-  var today = todaySheetName_();
-  freezeOtherDateSheets_(ss, today);
 
   setupHelperSheet_(ss);
   setupDspHelperSheet_(ss);
@@ -259,10 +250,15 @@ function generateTodayDelivery() {
   setupPivotSheet_(ss, pivot, today);
   ss.setActiveSheet(pivot);
 
+  var extra = repaired.length
+    ? "\n已清除往日误写入的未知行：" + repaired.join("、")
+    : "";
   SpreadsheetApp.getUi().alert(
     "已生成今日妥投：" +
       today +
-      "\n\n往日日期 tab 已保留（冻结为数值）。\n请在 R 列补未知映射后点 Update DSP Mapping。"
+      "\n\n往日日期 tab 已先冻结为数值。" +
+      extra +
+      "\n请在 R 列补未知映射后点 Update DSP Mapping。"
   );
 }
 
@@ -277,37 +273,18 @@ function freezeOtherDateSheets_(ss, todayName) {
   }
 }
 
-/** 菜单：把当前工作 pivot 的 A–L / N–P 冻成数值（补完 mapping 后、贴次日数据前） */
-function freezeWorkingPivot() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var pivot = getWorkingPivot_(ss);
-  if (!pivot) {
-    SpreadsheetApp.getUi().alert("请先点「生成今日妥投」。");
-    return;
-  }
-  freezePivotSheetToValues_(pivot);
-  SpreadsheetApp.getUi().alert(
-    "已冻结「" +
-      pivot.getName() +
-      "」的 A–L / N–P 为数值。\n此后改 delivery_monitoring 或 dsp_mapping 不会再改这张表的汇总和未知行。"
-  );
-}
-
 /**
  * 往日 tab 若在「次日 monitoring 已贴上、A–L 仍是公式」时被冻结，
- * 未知行会变成次日的未知，和本表 N–P 对不上。
- * 若 N–P 里空 Team 的司机已在 Q/R 补过映射，则清掉这张表的未知行。
+ * 未知行会变成次日的未知。N–P 里空 Team 且已填 Q/R 的，清掉误写入的未知行。
  */
-function repairPoisonedUnknownRows() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var today = todaySheetName_();
+function repairPoisonedUnknownRows_(ss, todayName) {
   var unk = unknownRow_();
   var repaired = [];
 
   ss.getSheets().forEach(function (sh) {
     var name = sh.getName();
-    if (!isDateSheetName_(name) || name === today) return;
-    if (sh.getRange("A3").getFormula()) return; // 尚未冻结，留给 freeze 处理
+    if (!isDateSheetName_(name) || name === todayName) return;
+    if (sh.getRange("A3").getFormula()) return;
 
     var bUnk = String(sh.getRange("B" + unk).getDisplayValue() || "").trim();
     if (normalizeDspKey(bUnk) !== normalizeDspKey(UNKNOWN_LABEL)) return;
@@ -331,11 +308,7 @@ function repairPoisonedUnknownRows() {
     repaired.push(name);
   });
 
-  if (repaired.length === 0) {
-    SpreadsheetApp.getUi().alert("没有需要清除的往日未知行（或该日 N–P 仍有未填 Q/R 的司机）。");
-    return;
-  }
-  SpreadsheetApp.getUi().alert("已清除误写入的未知行：\n" + repaired.join("\n"));
+  return repaired;
 }
 
 function freezePivotSheetToValues_(pivot) {
