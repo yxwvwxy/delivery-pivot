@@ -666,14 +666,15 @@ function setupHelperSheet_(ss) {
   sh.getRange("I2").setFormula(
     '=ARRAYFORMULA(IF(A2:A="",,IFERROR(VALUE(delivery_monitoring!H2:H),0)))'
   );
+  // 总数 = 200+202+211+213+231+232+203；妥投率 = (总数-202)/总数
   sh.getRange("J2").setFormula(
-    "=ARRAYFORMULA(IF(A2:A=\"\",,D2:D+E2:E+G2:G+H2:H+I2:I))"
+    "=ARRAYFORMULA(IF(A2:A=\"\",,C2:C+D2:D+E2:E+F2:F+G2:G+H2:H+I2:I))"
   );
   sh.getRange("K2").setFormula(
     "=ARRAYFORMULA(IF(A2:A=\"\",,E2:E+G2:G+H2:H))"
   );
   sh.getRange("L2").setFormula(
-    "=ARRAYFORMULA(IF(A2:A=\"\",,IFERROR(I2:I/J2:J,0)))"
+    "=ARRAYFORMULA(IF(A2:A=\"\",,IFERROR((J2:J-D2:D)/J2:J,0)))"
   );
   sh.getRange("M2").setFormula(
     "=ARRAYFORMULA(IF(A2:A=\"\",,IF(J2:J<=0,0,IF(L2:L<0.95,1,0))))"
@@ -728,10 +729,10 @@ function setupDspHelperSheet_(ss) {
     sh.getRange(row, 5).setFormula("=SUMIF('_pivot_data'!$B:$B," + b + ",'_pivot_data'!$G:$G)");
     sh.getRange(row, 6).setFormula("=SUMIF('_pivot_data'!$B:$B," + b + ",'_pivot_data'!$H:$H)");
     sh.getRange(row, 7).setFormula("=SUMIF('_pivot_data'!$B:$B," + b + ",'_pivot_data'!$I:$I)");
-    sh.getRange(row, 8).setFormula("=C" + row + "+D" + row + "+E" + row + "+F" + row + "+G" + row);
+    sh.getRange(row, 8).setFormula("=SUMIF('_pivot_data'!$B:$B," + b + ",'_pivot_data'!$J:$J)");
     sh.getRange(row, 9).setFormula("=D" + row + "+E" + row + "+F" + row);
     sh.getRange(row, 10).setFormula("=IFERROR(I" + row + "/H" + row + ",0)");
-    sh.getRange(row, 11).setFormula("=IFERROR(G" + row + "/H" + row + ",0)");
+    sh.getRange(row, 11).setFormula("=IFERROR((H" + row + "-C" + row + ")/H" + row + ",0)");
     sh.getRange(row, 12).setFormula("=SUMIF('_pivot_data'!$B:$B," + b + ",'_pivot_data'!$M:$M)");
   }
   sh.hideSheet();
@@ -817,10 +818,18 @@ function setupPivotSheet_(ss, pivot, dateName) {
       unk +
       ")*('_pivot_data'!$D$2:$D>0)*('_pivot_data'!$I$2:$I)))"
   );
-  pivot.getRange("H" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",C" + unk + "+D" + unk + "+E" + unk + "+F" + unk + "+G" + unk + ")");
+  pivot.getRange("H" + unk).setFormula(
+    "=IF(B" +
+      unk +
+      "=\"\",\"\",SUMPRODUCT(('_pivot_data'!$B$2:$B=$B" +
+      unk +
+      ")*('_pivot_data'!$J$2:$J)))"
+  );
   pivot.getRange("I" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",D" + unk + "+E" + unk + "+F" + unk + ")");
   pivot.getRange("J" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",IFERROR(I" + unk + "/H" + unk + ",0))");
-  pivot.getRange("K" + unk).setFormula("=IF(B" + unk + "=\"\",\"\",IFERROR(G" + unk + "/H" + unk + ",0))");
+  pivot.getRange("K" + unk).setFormula(
+    "=IF(B" + unk + "=\"\",\"\",IFERROR((H" + unk + "-C" + unk + ")/H" + unk + ",0))"
+  );
   pivot.getRange("L" + unk).setFormula(
     "=IF(B" +
       unk +
