@@ -3,5 +3,7 @@
 ### Demo (anonymized and simplified sample)
 
 <p align="center">
-  <video src="docs/daily-performance-report.mp4" autoplay loop muted playsinline width="920"></video>
+  <img src="docs/daily-performance-report.gif" alt="Daily Performance Report demo" width="920" />
 </p>
+
+**Interactive demo (GitHub Pages):** after you enable Pages (Settings → Pages → Build and deployment → **GitHub Actions**), open `https://yxwvwxy.github.io/delivery-pivot/` — same dashboard as the Canvas, with live 2.2s pipeline steps (not a GIF; timing matches exactly).
