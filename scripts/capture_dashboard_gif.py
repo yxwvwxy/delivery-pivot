@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record dashboard preview: MP4 (real-time 2.2s steps) + GIF (for GitHub README img)."""
+"""Record dashboard preview: MP4 (real-time pipeline steps) + GIF (for GitHub README img)."""
 
 import io
 import shutil
@@ -16,7 +16,7 @@ GIF_OUT = ROOT / "docs" / "daily-performance-report.gif"
 WEBM_OUT = ROOT / "docs" / "daily-performance-report.webm"
 MP4_OUT = ROOT / "docs" / "daily-performance-report.mp4"
 
-STEP_MS = 2200  # match canvases/ewr-performance-dashboard.canvas.tsx
+STEP_MS = 1800  # match canvases/ewr-performance-dashboard.canvas.tsx
 
 
 def ffmpeg_exe() -> str:
