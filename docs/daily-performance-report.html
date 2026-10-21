@@ -230,7 +230,7 @@
       var step = 0;
       var steps = document.querySelectorAll(".step[data-step]");
       var arrows = document.querySelectorAll(".arrow[data-arrow]");
-      var timer = null;
+      var captureMode = /[?&]capture=1(?:&|$)/.test(location.search);
 
       function render() {
         steps.forEach(function (el) {
@@ -241,22 +241,19 @@
         });
       }
 
-      function tick() {
-        step = (step + 1) % 3;
+      window.__setPipelineStep = function (n) {
+        step = ((n % 3) + 3) % 3;
         render();
-      }
+      };
 
       render();
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      timer = setInterval(tick, 2200);
-      document.addEventListener("visibilitychange", function () {
-        if (document.hidden) {
-          if (timer) clearInterval(timer);
-          timer = null;
-        } else if (!timer) {
-          timer = setInterval(tick, 2200);
-        }
-      });
+
+      if (captureMode) return;
+
+      setInterval(function () {
+        step = (step + 1) % 3;
+        render();
+      }, 2200);
     })();
   </script>
 </body>

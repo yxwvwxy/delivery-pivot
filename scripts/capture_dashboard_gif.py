@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Capture docs/daily-performance-report.html to an animated GIF (Canvas pipeline timing)."""
+"""Capture dashboard preview assets (WebM + optional GIF) from docs/daily-performance-report.html."""
 
 import io
+import shutil
+import tempfile
 from pathlib import Path
 
 from PIL import Image
@@ -9,51 +11,85 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "docs" / "daily-performance-report.html"
-OUT = ROOT / "docs" / "daily-performance-report.gif"
+GIF_OUT = ROOT / "docs" / "daily-performance-report.gif"
+WEBM_OUT = ROOT / "docs" / "daily-performance-report.webm"
 
 STEP_MS = 2200
-CYCLES = 1
+HOLD_FRAMES = 11  # 11 × 200 ms = 2.2 s per step
 FRAME_MS = 200
-DURATION_MS = STEP_MS * 3 * CYCLES
 
 
-def quantize_with_shared_palette(frames_rgb: list[Image.Image]) -> list[Image.Image]:
-    """One palette for all frames — avoids color flicker between identical frames."""
+def capture_step_frames(page) -> list[Image.Image]:
+    """Three pipeline steps; duplicate each screenshot so GIF holds still between transitions."""
+    frames_rgb: list[Image.Image] = []
+    for step in range(3):
+        page.evaluate("(s) => window.__setPipelineStep(s)", step)
+        page.wait_for_timeout(150)
+        png = page.screenshot(full_page=True)
+        rgb = Image.open(io.BytesIO(png)).convert("RGB")
+        for _ in range(HOLD_FRAMES):
+            frames_rgb.append(rgb.copy())
+    return frames_rgb
+
+
+def write_gif(frames_rgb: list[Image.Image]) -> None:
     palette_ref = frames_rgb[0].quantize(colors=256, method=Image.Quantize.MEDIANCUT)
-    out: list[Image.Image] = [palette_ref]
-    for frame in frames_rgb[1:]:
-        out.append(frame.quantize(palette=palette_ref))
-    return out
+    frames_p = [f.quantize(palette=palette_ref, dither=Image.Dither.NONE) for f in frames_rgb]
+    duration_cs = FRAME_MS // 10
+    frames_p[0].save(
+        GIF_OUT,
+        save_all=True,
+        append_images=frames_p[1:],
+        duration=duration_cs,
+        loop=0,
+        optimize=True,
+        disposal=1,
+    )
+    print(f"Wrote {GIF_OUT} ({len(frames_p)} frames, 3 holds)")
+
+
+def capture_webm(page_url: str) -> None:
+    tmp = Path(tempfile.mkdtemp(prefix="dashboard-capture-"))
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            context = browser.new_context(
+                viewport={"width": 920, "height": 1400},
+                device_scale_factor=1.5,
+                record_video_dir=str(tmp),
+                record_video_size={"width": 920, "height": 1400},
+            )
+            page = context.new_page()
+            page.goto(page_url, wait_until="networkidle")
+            page.wait_for_timeout(STEP_MS * 3 + 400)
+            context.close()
+            browser.close()
+
+        videos = sorted(tmp.glob("*.webm"))
+        if not videos:
+            raise RuntimeError("No WebM recording produced")
+        shutil.copy(videos[-1], WEBM_OUT)
+        print(f"Wrote {WEBM_OUT}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def main() -> None:
-    frames_rgb: list[Image.Image] = []
+    capture_url = HTML.as_uri() + "?capture=1"
+    live_url = HTML.as_uri()
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(
             viewport={"width": 920, "height": 1400},
             device_scale_factor=1.5,
         )
-        page.goto(HTML.as_uri(), wait_until="networkidle")
-        frame_count = (DURATION_MS + FRAME_MS - 1) // FRAME_MS
-        for _ in range(frame_count):
-            png = page.screenshot(full_page=True)
-            frames_rgb.append(Image.open(io.BytesIO(png)).convert("RGB"))
-            page.wait_for_timeout(FRAME_MS)
+        page.goto(capture_url, wait_until="networkidle")
+        frames_rgb = capture_step_frames(page)
         browser.close()
 
-    frames_p = quantize_with_shared_palette(frames_rgb)
-    duration_cs = FRAME_MS // 10
-    frames_p[0].save(
-        OUT,
-        save_all=True,
-        append_images=frames_p[1:],
-        duration=duration_cs,
-        loop=0,
-        optimize=True,
-        disposal=2,
-    )
-    print(f"Wrote {OUT} ({len(frames_p)} frames)")
+    write_gif(frames_rgb)
+    capture_webm(live_url)
 
 
 if __name__ == "__main__":
