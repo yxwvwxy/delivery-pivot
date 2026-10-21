@@ -37,7 +37,6 @@
       font-weight: 600;
       background: #161b22;
       color: #e6edf3;
-      transition: background 0.2s, color 0.2s;
     }
     .step.active { background: #388bfd; color: #ffffff; }
     .step-num { font-size: 11px; margin-bottom: 4px; opacity: 0.8; }
@@ -47,7 +46,6 @@
       font-weight: 700;
       color: #388bfd;
       opacity: 0.4;
-      transition: opacity 0.2s;
     }
     .arrow.on { opacity: 1; }
     .stats {
@@ -232,6 +230,8 @@
       var step = 0;
       var steps = document.querySelectorAll(".step[data-step]");
       var arrows = document.querySelectorAll(".arrow[data-arrow]");
+      var timer = null;
+
       function render() {
         steps.forEach(function (el) {
           el.classList.toggle("active", Number(el.dataset.step) === step);
@@ -240,10 +240,23 @@
           el.classList.toggle("on", Number(el.dataset.arrow) === step);
         });
       }
-      setInterval(function () {
+
+      function tick() {
         step = (step + 1) % 3;
         render();
-      }, 2200);
+      }
+
+      render();
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      timer = setInterval(tick, 2200);
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+          if (timer) clearInterval(timer);
+          timer = null;
+        } else if (!timer) {
+          timer = setInterval(tick, 2200);
+        }
+      });
     })();
   </script>
 </body>
