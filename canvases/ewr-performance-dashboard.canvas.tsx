@@ -94,7 +94,7 @@ function Pipeline() {
   useEffect(() => {
     const id = setInterval(() => {
       setStep((n) => (n + 1) % STEPS.length);
-    }, 1800);
+    }, 1500);
     return () => clearInterval(id);
   }, []);
 

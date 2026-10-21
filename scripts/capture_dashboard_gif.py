@@ -16,7 +16,7 @@ GIF_OUT = ROOT / "docs" / "daily-performance-report.gif"
 WEBM_OUT = ROOT / "docs" / "daily-performance-report.webm"
 MP4_OUT = ROOT / "docs" / "daily-performance-report.mp4"
 
-STEP_MS = 1800  # match canvases/ewr-performance-dashboard.canvas.tsx
+STEP_MS = 1500  # match canvases/ewr-performance-dashboard.canvas.tsx
 
 
 def ffmpeg_exe() -> str:
