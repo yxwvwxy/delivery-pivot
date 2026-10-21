@@ -14,7 +14,7 @@ HTML = ROOT / "docs" / "daily-performance-report.html"
 GIF_OUT = ROOT / "docs" / "daily-performance-report.gif"
 WEBM_OUT = ROOT / "docs" / "daily-performance-report.webm"
 
-STEP_MS = 2200
+STEP_MS = 2200  # match canvases/ewr-performance-dashboard.canvas.tsx
 HOLD_FRAMES = 11  # 11 × 200 ms = 2.2 s per step
 FRAME_MS = 200
 
@@ -35,12 +35,11 @@ def capture_step_frames(page) -> list[Image.Image]:
 def write_gif(frames_rgb: list[Image.Image]) -> None:
     palette_ref = frames_rgb[0].quantize(colors=256, method=Image.Quantize.MEDIANCUT)
     frames_p = [f.quantize(palette=palette_ref, dither=Image.Dither.NONE) for f in frames_rgb]
-    duration_cs = FRAME_MS // 10
     frames_p[0].save(
         GIF_OUT,
         save_all=True,
         append_images=frames_p[1:],
-        duration=duration_cs,
+        duration=FRAME_MS,  # Pillow GIF frame duration is milliseconds
         loop=0,
         optimize=True,
         disposal=1,
