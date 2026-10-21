@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Daily Performance Report</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      width: 920px;
+      margin: 0;
+      padding: 24px 20px 32px;
+      color: #e6edf3;
+      background: #0d1117;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1 { font-size: 24px; font-weight: 600; margin: 0 0 16px; line-height: 1.25; }
+    h2 { font-size: 18px; font-weight: 600; margin: 16px 0 8px; line-height: 1.3; }
+    h3 { font-size: 14px; font-weight: 600; margin: 6px 0 4px; line-height: 1.3; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .stack-tight { display: flex; flex-direction: column; gap: 6px; }
+    .pipeline {
+      display: grid;
+      grid-template-columns: 1fr 28px 1fr 28px 1fr;
+      align-items: center;
+      column-gap: 0;
+    }
+    .step {
+      height: 88px;
+      padding: 12px 14px;
+      border: 2px solid #388bfd;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-size: 13px;
+      line-height: 18px;
+      font-weight: 600;
+      background: #161b22;
+      color: #e6edf3;
+      transition: background 0.2s, color 0.2s;
+    }
+    .step.active { background: #388bfd; color: #ffffff; }
+    .step-num { font-size: 11px; margin-bottom: 4px; opacity: 0.8; }
+    .arrow {
+      text-align: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: #388bfd;
+      opacity: 0.4;
+      transition: opacity 0.2s;
+    }
+    .arrow.on { opacity: 1; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .stat {
+      padding: 14px 16px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #161b22;
+    }
+    .stat-value { font-size: 26px; font-weight: 600; line-height: 1.2; }
+    .stat-label { font-size: 12px; color: #8b949e; margin-top: 6px; }
+    .stat.success .stat-value { color: #3fb950; }
+    .stat.warning .stat-value { color: #d29922; }
+    .stat.danger .stat-value { color: #f85149; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    th, td { padding: 8px 12px; border-bottom: 1px solid #30363d; }
+    th {
+      font-weight: 600;
+      text-align: left;
+      background: #161b22;
+      color: #e6edf3;
+    }
+    td.num, th.num { text-align: right; }
+    tbody tr:nth-child(odd) { background: #0d1117; }
+    tbody tr:nth-child(even) { background: #161b22; }
+    tr.tone-success { box-shadow: inset 3px 0 0 #3fb950; }
+    tr.tone-warning { box-shadow: inset 3px 0 0 #d29922; }
+    tr.tone-danger { box-shadow: inset 3px 0 0 #f85149; }
+    .secondary { font-size: 12px; color: #8b949e; line-height: 1.4; margin: 0; }
+    .tertiary { font-size: 12px; color: #6e7681; line-height: 1.4; margin: 0; }
+    .alert-5d { color: #db6d28; font-weight: 600; }
+    .alert-3 { color: #e3b341; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="stack">
+    <h1>Daily Performance Report</h1>
+
+    <div class="pipeline" id="pipeline">
+      <div class="step active" data-step="0">
+        <div class="step-num">Step 1</div>
+        10pm fetch data via UniUni API
+      </div>
+      <div class="arrow on" data-arrow="0">→</div>
+      <div class="step" data-step="1">
+        <div class="step-num">Step 2</div>
+        Build Power BI daily performance report
+      </div>
+      <div class="arrow" data-arrow="1">→</div>
+      <div class="step" data-step="2">
+        <div class="step-num">Step 3</div>
+        Send messages to Microsoft Teams group chats
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat success">
+        <div class="stat-value">98.3%</div>
+        <div class="stat-label">Delivery rate</div>
+      </div>
+      <div class="stat warning">
+        <div class="stat-value">0.7%</div>
+        <div class="stat-label">Return rate</div>
+      </div>
+      <div class="stat danger">
+        <div class="stat-value">0.4%</div>
+        <div class="stat-label">Inactive rate</div>
+      </div>
+    </div>
+
+    <h2>10/14/2026 Delivery Performance</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>DSP</th>
+          <th class="num">Total</th>
+          <th class="num">Delivered</th>
+          <th class="num">Delivery rate</th>
+          <th class="num">To be delivered</th>
+          <th class="num">Returned</th>
+          <th class="num">Return rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="tone-success">
+          <td>DSP2</td>
+          <td class="num">5,120</td>
+          <td class="num">5,089</td>
+          <td class="num">99.4%</td>
+          <td class="num">0</td>
+          <td class="num">20</td>
+          <td class="num">0.4%</td>
+        </tr>
+        <tr class="tone-success">
+          <td>DSP1</td>
+          <td class="num">4,850</td>
+          <td class="num">4,811</td>
+          <td class="num">99.2%</td>
+          <td class="num">12</td>
+          <td class="num">24</td>
+          <td class="num">0.5%</td>
+        </tr>
+        <tr class="tone-warning">
+          <td>DSP3</td>
+          <td class="num">4,380</td>
+          <td class="num">4,275</td>
+          <td class="num">97.6%</td>
+          <td class="num">58</td>
+          <td class="num">32</td>
+          <td class="num">0.7%</td>
+        </tr>
+        <tr class="tone-danger">
+          <td>DSP4</td>
+          <td class="num">3,920</td>
+          <td class="num">3,783</td>
+          <td class="num">96.5%</td>
+          <td class="num">92</td>
+          <td class="num">30</td>
+          <td class="num">0.8%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Inactivity Report</h2>
+    <p class="secondary">10/9/2026–10/14/2026 · red = ≥5 days no update · yellow = 3–5 days no update</p>
+
+    <div class="stack-tight">
+      <h3>Driver inactivity by DSP</h3>
+      <p class="tertiary">Driver-owned parcels only · attributed to DSP</p>
+      <table>
+        <thead>
+          <tr><th>DSP</th><th class="num">≥5 days</th><th class="num">3–5 days</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>DSP1</td><td class="num"><span class="alert-5d">18</span></td><td class="num"><span class="alert-3">26</span></td></tr>
+          <tr><td>DSP2</td><td class="num"><span class="alert-5d">11</span></td><td class="num"><span class="alert-3">19</span></td></tr>
+          <tr><td>DSP3</td><td class="num"><span class="alert-5d">22</span></td><td class="num"><span class="alert-3">31</span></td></tr>
+          <tr><td>DSP4</td><td class="num"><span class="alert-5d">28</span></td><td class="num"><span class="alert-3">36</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="stack-tight">
+      <h3>Warehouse inactivity</h3>
+      <p class="tertiary">Warehouse / hub scope · not split by DSP</p>
+      <table>
+        <thead>
+          <tr><th>Site</th><th class="num">≥5 days</th><th class="num">3–5 days</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>WH1</td><td class="num"><span class="alert-5d">14</span></td><td class="num"><span class="alert-3">21</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="stack-tight">
+      <h3>Transit inactivity</h3>
+      <p class="tertiary">In transit between nodes · not attributed to any DSP</p>
+      <table>
+        <thead>
+          <tr><th>Scope</th><th class="num">≥5 days</th><th class="num">3–5 days</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Transit (network)</td><td class="num"><span class="alert-5d">9</span></td><td class="num"><span class="alert-3">14</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var step = 0;
+      var steps = document.querySelectorAll(".step[data-step]");
+      var arrows = document.querySelectorAll(".arrow[data-arrow]");
+      function render() {
+        steps.forEach(function (el) {
+          el.classList.toggle("active", Number(el.dataset.step) === step);
+        });
+        arrows.forEach(function (el) {
+          el.classList.toggle("on", Number(el.dataset.arrow) === step);
+        });
+      }
+      setInterval(function () {
+        step = (step + 1) % 3;
+        render();
+      }, 2200);
+    })();
+  </script>
+</body>
+</html>
