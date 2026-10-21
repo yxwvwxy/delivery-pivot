@@ -15,36 +15,33 @@ GIF_OUT = ROOT / "docs" / "daily-performance-report.gif"
 WEBM_OUT = ROOT / "docs" / "daily-performance-report.webm"
 
 STEP_MS = 2200  # match canvases/ewr-performance-dashboard.canvas.tsx
-HOLD_FRAMES = 11  # 11 × 200 ms = 2.2 s per step
-FRAME_MS = 200
 
 
 def capture_step_frames(page) -> list[Image.Image]:
-    """Three pipeline steps; duplicate each screenshot so GIF holds still between transitions."""
+    """One frame per pipeline step; GIF duration per frame = STEP_MS (same as Canvas interval)."""
     frames_rgb: list[Image.Image] = []
     for step in range(3):
         page.evaluate("(s) => window.__setPipelineStep(s)", step)
         page.wait_for_timeout(150)
         png = page.screenshot(full_page=True)
-        rgb = Image.open(io.BytesIO(png)).convert("RGB")
-        for _ in range(HOLD_FRAMES):
-            frames_rgb.append(rgb.copy())
+        frames_rgb.append(Image.open(io.BytesIO(png)).convert("RGB"))
     return frames_rgb
 
 
 def write_gif(frames_rgb: list[Image.Image]) -> None:
     palette_ref = frames_rgb[0].quantize(colors=256, method=Image.Quantize.MEDIANCUT)
     frames_p = [f.quantize(palette=palette_ref, dither=Image.Dither.NONE) for f in frames_rgb]
+    step_duration = [STEP_MS, STEP_MS, STEP_MS]
     frames_p[0].save(
         GIF_OUT,
         save_all=True,
         append_images=frames_p[1:],
-        duration=FRAME_MS,  # Pillow GIF frame duration is milliseconds
+        duration=step_duration,
         loop=0,
-        optimize=True,
+        optimize=False,
         disposal=1,
     )
-    print(f"Wrote {GIF_OUT} ({len(frames_p)} frames, 3 holds)")
+    print(f"Wrote {GIF_OUT} ({len(frames_p)} frames @ {STEP_MS} ms each)")
 
 
 def capture_webm(page_url: str) -> None:

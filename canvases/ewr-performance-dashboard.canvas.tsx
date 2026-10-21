@@ -160,7 +160,12 @@ export default function EwrPerformanceDashboard() {
 
   return (
     <Stack gap={16}>
-      <H1>Daily Performance Report</H1>
+      <Stack gap={4}>
+        <H1>Daily Performance Report</H1>
+        <Text tone="secondary" size="small">
+          Demo (anonymized and simplified sample)
+        </Text>
+      </Stack>
       <Pipeline />
 
       <Grid columns={3} gap={12}>
