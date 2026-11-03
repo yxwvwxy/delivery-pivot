@@ -1,5 +1,7 @@
 # Daily Performance Report
 
+Daily last-mile DSP performance reporting—UniUni data to Power BI and Teams—with Apps Script for daily delivery pivot sheets.
+
 ### Demo (anonymized and simplified sample)
 
 <p align="center">
