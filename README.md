@@ -22,6 +22,7 @@ This repository holds:
 |--------|------|
 | `canvases/ewr-performance-dashboard.canvas.tsx` | Cursor Canvas mock of the daily report (sample data) |
 | `docs/daily-performance-report.html` | Static preview deployed to GitHub Pages |
+| `docs/daily-performance-report.png` | Still image of the report, with no pipeline step highlighted |
 | `Code.gs` | Google Apps Script for the operational spreadsheet workflow |
 
 ### Nightly flow (target)
